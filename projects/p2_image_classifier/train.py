@@ -9,19 +9,27 @@ import torch.nn.functional as F
 from torchvision import datasets, transforms, models
 
 from collections import OrderedDict
+from helper import predict_output
+from enum import Enum
 
 #    Basic usage: python train.py data_directory
 #    Prints out training loss, validation loss, and validation accuracy as the network trains
 #    Options:
 #        Set directory to save checkpoints: python train.py data_dir --save_dir save_directory
-#        Choose architecture: python train.py data_dir --arch "vgg13"
+#        Choose architecture: python train.py data_dir --arch "vgg16"
 #        Set hyperparameters: python train.py data_dir --learning_rate 0.01 --hidden_units 512 --epochs 20
 #        Use GPU for training: python train.py data_dir --gpu
+
+class Arch(Enum):
+    densenet121 = 'densenet121'
+    vgg16 = 'vgg16'
+    def __str__(self):
+        return self.value
 
 parser = argparse.ArgumentParser(description="Prints out training loss, validation loss, and validation accuracy as the network trains")
 parser.add_argument("data_dir", help="path of the data directory")
 parser.add_argument("--save_dir", help="path of the save directory")
-parser.add_argument("--arch", help="the architecture of the pretrained network")
+parser.add_argument("--arch", help="the architecture of the pretrained network", type=Arch, choices=list(Arch))
 parser.add_argument("--learning_rate", help="learning rate", type=float)
 parser.add_argument("--hidden_units", help="hidden unit", type=int)
 parser.add_argument("--epochs", help="epochs", type=int)
@@ -58,7 +66,7 @@ def load_dataset(data_dir):
                                                                [0.229, 0.224, 0.225])])
     # Load the datasets with ImageFolder
     train_data = datasets.ImageFolder(train_dir, transform=train_transforms)
-    valid_data = datasets.ImageFolder(valid_dir, transform=test_transforms)
+    valid_data = datasets.ImageFolder(valid_dir, transform=valid_transforms)
     test_data = datasets.ImageFolder(test_dir, transform=test_transforms)
     # Using the image datasets and the trainforms, define the dataloaders
     trainloader = torch.utils.data.DataLoader(train_data, batch_size=64, shuffle=True)
@@ -71,13 +79,16 @@ def build_model(arch, hidden_units):
     """
     """
     # Load a pre-trained network    
-    model = getattr(models, arch)(pretrained=True)
+    model = getattr(models, arch)(pretrained=True) ## model = models.densenet121(pretrained=True)
     # Define a new, untrained feed-forward network as a classifier, use ReLU activations and dropout
     for param in model.parameters():
         param.requires_grad = False
 
+    last_layer_size = 1024    # densenet121
+    if arch == "vgg16":
+        last_layer_size = 25088
     classifier = nn.Sequential(OrderedDict([
-                              ('fc1', nn.Linear(1024, hidden_units)),
+                              ('fc1', nn.Linear(last_layer_size, hidden_units)),
                               ('relu', nn.ReLU()),
                               ('fc2', nn.Linear(hidden_units, 102)),
                               ('output', nn.LogSoftmax(dim=1))
@@ -87,7 +98,10 @@ def build_model(arch, hidden_units):
     return model
 
 def train_model(criterion, optimizer, model, epochs, trainloader):
-    
+#    # Train the classifier layers using backpropagation using the pre-trained network to get the features
+#     criterion = nn.NLLLoss()
+#     optimizer = optim.Adam(model.classifier.parameters(), lr=0.001)
+
     print_every = 40
     steps = 0
 
@@ -121,39 +135,25 @@ def train_model(criterion, optimizer, model, epochs, trainloader):
 
                 running_loss = 0
 
-def predict_output(model, loader, dataset_type):
-    correct = 0
-    total = 0
-    if args.gpu:
-        model.to('cuda')
-    model.eval()
-    with torch.no_grad():
-        for data in loader:
-            if args.gpu:
-                images, labels = data[0].to('cuda'),data[1].to('cuda')
-            outputs = model.forward(images)
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-    print('Accuracy of the network on the %s is: %d %%' % (dataset_type, 100 * correct / total))
-
 # Driver
-# Default parameter setting
+##### Default parameter setting
 data_dir = args.data_dir
 arch = "densenet121"
 hidden_units = 400
 learning_rate = 0.001
 epochs = 3
+save_dir = ''
 if args.arch:
-    arch = args.arch
+    arch = str(args.arch)
+    
 if args.save_dir:
-    print(args.save_dir)
+    save_dir = args.save_dir + '/'
 if args.learning_rate:
     learning_rate = args.learning_rate
 if args.hidden_units:
     hidden_units = args.hidden_unit
 if args.epochs:
-    print(args.epochs)    
+    epochs = args.epochs
 if args.gpu:
     print("enable gpu")
     
@@ -163,12 +163,12 @@ model = build_model(arch, hidden_units)
 criterion = nn.NLLLoss()
 optimizer = optim.Adam(model.classifier.parameters(), lr=learning_rate)
 train_model(criterion, optimizer, model, epochs, trainloader)
-predict_output(model, trainloader, "training set")
-predict_output(model, validloader, "validation set")
-predict_output(model, testloader, "test set")
+predict_output(model, trainloader, "training set", criterion, args.gpu)
+predict_output(model, validloader, "validation set", criterion, args.gpu)
+predict_output(model, testloader, "test set", criterion, args.gpu)
 
 def save_checkpoint(arch, learning_rate, model, epochs, optimizer, criterion, train_data):
-    checkpoint = {'arch': arch,
+    checkpoint = {'arch': str(arch),
                   'learning_rate': learning_rate,
                   'epochs': epochs,
                   'classifier': model.classifier,
@@ -177,7 +177,7 @@ def save_checkpoint(arch, learning_rate, model, epochs, optimizer, criterion, tr
                   'criterion_state': criterion.state_dict(),
                   'class_to_idx': train_data.class_to_idx
                  }
-    torch.save(checkpoint, 'checkpoint.pth')
+    torch.save(checkpoint, '%scheckpoint_%s.pth' % (save_dir, arch))
 
-save_checkpoint(model, epochs, optimizer, criterion, train_data)
+save_checkpoint(str(arch), learning_rate, model, epochs, optimizer, criterion, train_data)
 
