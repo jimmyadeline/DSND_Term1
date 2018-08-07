@@ -12,6 +12,8 @@ from collections import OrderedDict
 from helper import predict_output
 from enum import Enum
 
+from helper import validation
+
 #    Basic usage: python train.py data_directory
 #    Prints out training loss, validation loss, and validation accuracy as the network trains
 #    Options:
@@ -132,7 +134,10 @@ def train_model(criterion, optimizer, model, epochs, trainloader):
             if steps % print_every == 0:
                 print("Epoch: {}/{}... ".format(e+1, epochs),
                       "Loss: {:.4f}".format(running_loss/print_every))
-
+                model.eval()
+                validation(model, validloader, criterion)
+                model.train()
+                
                 running_loss = 0
 
 # Driver
