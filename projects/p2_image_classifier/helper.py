@@ -29,21 +29,24 @@ def imshow(image, ax=None, title=None):
     
     return ax
 
-def validation(model, loader, criterion):
+def valid_training(model, loader, criterion, enable_gpu=False):
     correct = 0
     total = 0 
     if enable_gpu:
         model.to('cuda')
+    else:
+        model.to('cpu')
     running_val_loss = 0
     with torch.no_grad():
         for data in loader:
+            imag, labs = data[0], data[1]
             if enable_gpu:
-                images, labels = data[0].to('cuda'),data[1].to('cuda')
-            outputs = model.forward(images)
-            running_val_loss += criterion(outputs, labels)
+                imag, labs = data[0].to('cuda'),data[1].to('cuda')
+            outputs = model.forward(imag)
+            running_val_loss += criterion(outputs, labs)
             _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
+            total += labs.size(0)
+            correct += (predicted == labs).sum().item()
     print("Valid loss: {:.3f}".format(running_val_loss/len(loader)),
           "Accuracy: {:.3f}".format(100 * correct / total))
     
@@ -52,10 +55,13 @@ def predict_output(model, loader, dataset_type, criterion, enable_gpu=False):
     total = 0
     if enable_gpu:
         model.to('cuda')
+    else:
+        model.to('cpu')
     model.eval()
     total_loss = 0
     with torch.no_grad():
         for data in loader:
+            images, labels = data[0], data[1]
             if enable_gpu:
                 images, labels = data[0].to('cuda'),data[1].to('cuda')
             outputs = model.forward(images)

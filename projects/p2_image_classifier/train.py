@@ -12,7 +12,7 @@ from collections import OrderedDict
 from helper import predict_output
 from enum import Enum
 
-from helper import validation
+from helper import valid_training
 
 #    Basic usage: python train.py data_directory
 #    Prints out training loss, validation loss, and validation accuracy as the network trains
@@ -135,7 +135,7 @@ def train_model(criterion, optimizer, model, epochs, trainloader):
                 print("Epoch: {}/{}... ".format(e+1, epochs),
                       "Loss: {:.4f}".format(running_loss/print_every))
                 model.eval()
-                validation(model, validloader, criterion)
+                valid_training(model, validloader, criterion, args.gpu)
                 model.train()
                 
                 running_loss = 0
